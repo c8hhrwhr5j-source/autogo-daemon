@@ -29,15 +29,32 @@ import (
 )
 
 const (
-	DAEMON_PORT    = 15200
-	DAEMON_VERSION = "1.0.0"
-	BIN_DEST       = "/usr/local/bin/autogod"
-	PLIST_DEST     = "/Library/LaunchDaemons/com.autogo.daemon.plist"
+	DAEMON_PORT      = 15200
+	DISCOVERY_PORT   = 15201 // UDP 广播发现端口
+	DAEMON_VERSION   = "1.2.0"
+	BIN_DEST         = "/usr/local/bin/autogod"
+	PLIST_DEST       = "/Library/LaunchDaemons/com.autogo.daemon.plist"
+	BROADCAST_PERIOD = 3 * time.Second // UDP 广播间隔
 )
 
 func main() {
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 	log.Printf("AutoGo Daemon v%s 启动中...", DAEMON_VERSION)
+
+	// 自动自安装：如果不在固定路径运行，则自动安装为 launchd 服务
+	exePath, _ := os.Executable()
+	if exePath != BIN_DEST {
+		log.Printf("检测到首发启动 (路径: %s)，自动安装为系统服务...", exePath)
+		err := installToLaunchd(exePath)
+		if err != nil {
+			log.Printf("⚠️ 自安装失败: %v (将继续尝试直接运行)", err)
+		} else {
+			log.Printf("✅ 系统服务已安装，launchd 将接管守护进程")
+			// 不退出，继续提供 HTTP 服务直到被 launchd 接管
+		}
+	} else {
+		log.Printf("由 launchd 管理运行中...")
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", handlePing)
@@ -72,13 +89,17 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%d", DAEMON_PORT)
-	listener, err := net.Listen("tcp", addr)
+	// 显式绑定 0.0.0.0 确保 IPv4 socket（iOS 上 ":port" 会默认创建 IPv6-only socket）
+	listener, err := net.Listen("tcp", "0.0.0.0"+addr)
 	if err != nil {
 		log.Fatalf("监听端口 %d 失败: %v", DAEMON_PORT, err)
 	}
 
-	log.Printf("✅ AutoGo Daemon 已启动，端口: %d", DAEMON_PORT)
-	log.Printf("   心跳: http://localhost:%d/ping", DAEMON_PORT)
+	log.Printf("✅ AutoGo Daemon 已启动，端口: %d (IPv4)", DAEMON_PORT)
+	log.Printf("   心跳: http://<设备IP>:%d/ping", DAEMON_PORT)
+
+	// 启动 UDP 广播（让中控快速发现本设备，无需全子网扫描）
+	go broadcastPresence()
 
 	srv := &http.Server{
 		Handler:      mux,
@@ -90,6 +111,147 @@ func main() {
 	if err := srv.Serve(listener); err != nil {
 		log.Fatalf("服务异常退出: %v", err)
 	}
+}
+
+// installToLaunchd 将当前二进制安装为 launchd 系统服务
+// launchd 会负责 KeepAlive，即使 App 闪退也能持续运行
+func installToLaunchd(exePath string) error {
+	// 1. 复制到固定路径
+	input, err := os.ReadFile(exePath)
+	if err != nil {
+		return fmt.Errorf("读取自身失败: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(BIN_DEST), 0755); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+	if err := os.WriteFile(BIN_DEST, input, 0755); err != nil {
+		return fmt.Errorf("复制二进制失败: %w", err)
+	}
+	log.Printf("  ✓ 已复制到 %s", BIN_DEST)
+
+	// 2. 创建 launchd plist
+	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.autogo.daemon</string>
+    <key>Program</key>
+    <string>%s</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>1</integer>
+    <key>StandardOutPath</key>
+    <string>/var/log/autogod.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/autogod.err</string>
+    <key>WorkingDirectory</key>
+    <string>/var/root</string>
+</dict>
+</plist>`, BIN_DEST)
+
+	os.MkdirAll("/var/log", 0755)
+	if err := os.MkdirAll(filepath.Dir(PLIST_DEST), 0755); err != nil {
+		return fmt.Errorf("创建 plist 目录失败: %w", err)
+	}
+	if err := os.WriteFile(PLIST_DEST, []byte(plistContent), 0644); err != nil {
+		return fmt.Errorf("写入 plist 失败: %w", err)
+	}
+	log.Printf("  ✓ plist 已创建: %s", PLIST_DEST)
+
+	// 3. 卸载旧服务（如果存在）再加载
+	exec.Command("launchctl", "unload", PLIST_DEST).Run()
+	output, err := exec.Command("launchctl", "load", PLIST_DEST).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("launchctl 加载失败: %s (err: %w)", string(output), err)
+	}
+	log.Printf("  ✓ launchd 服务已加载")
+	log.Printf("")
+	log.Printf("📱 AutoGo Daemon 已安装为系统服务！")
+	log.Printf("   手机重启后自动运行，无需手动操作")
+	log.Printf("   日志文件: /var/log/autogod.log")
+	return nil
+}
+
+// ==================== UDP 广播发现 ====================
+
+// broadcastPresence 周期性地向局域网广播设备存在信息
+// 中控监听 15201 端口即可快速发现设备，无需全子网 TCP 扫描
+func broadcastPresence() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("UDP 广播 panic 恢复: %v", r)
+		}
+	}()
+
+	for {
+		ips := getLocalIPv4s()
+		for _, ip := range ips {
+			broadcastIP := getBroadcastAddr(ip)
+			if broadcastIP == "" {
+				continue
+			}
+
+			msg := fmt.Sprintf(`{"service":"AutoGoDaemon","version":"%s","port":%d,"hostname":"%s"}`,
+				DAEMON_VERSION, DAEMON_PORT, getHostname())
+
+			addr := &net.UDPAddr{IP: net.ParseIP(broadcastIP), Port: DISCOVERY_PORT}
+			conn, err := net.DialUDP("udp", nil, addr)
+			if err != nil {
+				continue
+			}
+			conn.Write([]byte(msg))
+			conn.Close()
+		}
+		time.Sleep(BROADCAST_PERIOD)
+	}
+}
+
+// getLocalIPv4s 获取本机所有非回环 IPv4 地址
+func getLocalIPv4s() []net.IP {
+	var ips []net.IP
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ips
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := iface.Addrs()
+		for _, a := range addrs {
+			n, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := n.IP.To4()
+			if ip != nil && !ip.IsLoopback() {
+				ips = append(ips, ip)
+			}
+		}
+	}
+	return ips
+}
+
+// getBroadcastAddr 根据本机 IP 计算子网广播地址（假设 /24 子网）
+func getBroadcastAddr(ip net.IP) string {
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d.%d.%d.255", ip4[0], ip4[1], ip4[2])
+}
+
+// getHostname 获取设备主机名
+func getHostname() string {
+	name, err := os.Hostname()
+	if err != nil {
+		return "iOS"
+	}
+	return name
 }
 
 // ==================== API 处理函数 ====================
