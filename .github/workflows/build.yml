@@ -39,18 +39,20 @@ jobs:
           ldid -Sentitlements.plist AutoGoDaemon
           echo "Signed OK"
 
-      - name: Package IPA
+       - name: Package IPA
         run: |
           APP="Payload/AutoGoDaemon.app"
           mkdir -p "$APP"
           cp AutoGoDaemon "$APP/"
           cp Info.plist "$APP/"
           ICONS="Assets.xcassets/AppIcon.appiconset"
-          cp "$ICONS/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png"
-          cp "$ICONS/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png"
-          cp "$ICONS/Icon-76.png"     "$APP/AppIcon76x76.png"
-          cp "$ICONS/Icon-76@2x.png"  "$APP/AppIcon76x76@2x.png"
-          cp "$ICONS/Icon-1024.png"   "$APP/iTunesArtwork.png"
+          if [ -d "$ICONS" ]; then
+            cp "$ICONS/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png" 2>/dev/null || true
+            cp "$ICONS/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png" 2>/dev/null || true
+            cp "$ICONS/Icon-76.png"     "$APP/AppIcon76x76.png" 2>/dev/null || true
+            cp "$ICONS/Icon-76@2x.png"  "$APP/AppIcon76x76@2x.png" 2>/dev/null || true
+            cp "$ICONS/Icon-1024.png"   "$APP/iTunesArtwork.png" 2>/dev/null || true
+          fi
           zip -r AutoGoDaemon-1.0.0.ipa Payload
           ls -lh AutoGoDaemon-1.0.0.ipa
 
