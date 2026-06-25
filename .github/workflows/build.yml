@@ -3,7 +3,7 @@ name: Build iOS IPA
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   build:
@@ -19,16 +19,12 @@ jobs:
           go-version: "1.21"
 
       - name: Install ldid
-        run: |
-          brew install ldid
-          which ldid
+        run: brew install ldid
 
       - name: Build Go binary (iOS arm64)
         run: |
           export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "SDKROOT: $SDKROOT"
-          export CGO_CFLAGS="-isysroot $SDKROOT -miphoneos-version-min=12.0"
-          export CGO_LDFLAGS="-isysroot $SDKROOT"
           CGO_ENABLED=1 GOOS=ios GOARCH=arm64 \
             go build -ldflags="-s -w" -o AutoGoDaemon .
           file AutoGoDaemon
@@ -43,22 +39,30 @@ jobs:
         run: |
           APP="Payload/AutoGoDaemon.app"
           mkdir -p "$APP"
+
+          # 二进制
           cp AutoGoDaemon "$APP/"
+
+          # Info.plist
           cp Info.plist "$APP/"
+
+          # 图标 (TrollStore 读取 AppIcon60x60 系列)
           ICONS="Assets.xcassets/AppIcon.appiconset"
-          if [ -d "$ICONS" ]; then
-            cp "$ICONS/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png" 2>/dev/null || true
-            cp "$ICONS/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png" 2>/dev/null || true
-            cp "$ICONS/Icon-76.png"     "$APP/AppIcon76x76.png" 2>/dev/null || true
-            cp "$ICONS/Icon-76@2x.png"  "$APP/AppIcon76x76@2x.png" 2>/dev/null || true
-            cp "$ICONS/Icon-1024.png"   "$APP/iTunesArtwork.png" 2>/dev/null || true
-          fi
-          zip -r AutoGoDaemon-1.0.0.ipa Payload
-          ls -lh AutoGoDaemon-1.0.0.ipa
+          cp "$ICONS/Icon-60@2x.png" "$APP/AppIcon60x60@2x.png"
+          cp "$ICONS/Icon-60@3x.png" "$APP/AppIcon60x60@3x.png"
+          # 无后缀版本（TrollStore 兼容）
+          cp "$ICONS/Icon-60@2x.png" "$APP/AppIcon60x60.png"
+          cp "$ICONS/Icon-76.png"     "$APP/AppIcon76x76.png"
+          cp "$ICONS/Icon-76@2x.png"  "$APP/AppIcon76x76@2x.png"
+          cp "$ICONS/Icon-1024.png"   "$APP/iTunesArtwork.png"
+
+          # 打包
+          zip -r AutoGoDaemon-1.2.0.ipa Payload
+          ls -lh AutoGoDaemon-1.2.0.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: AutoGoDaemon-iOS
-          path: AutoGoDaemon-1.0.0.ipa
+          path: AutoGoDaemon-1.2.0.ipa
           retention-days: 90
