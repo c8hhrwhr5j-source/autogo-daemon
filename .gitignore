@@ -1,0 +1,11 @@
+# 构建产物
+dist/
+*.ipa
+Payload/
+
+# Go 编译产物
+AutoGoDaemon
+
+# IDE
+.idea/
+.vscode/

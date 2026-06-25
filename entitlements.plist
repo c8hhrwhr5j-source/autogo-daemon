@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 巨魔核心权限：允许越狱级文件系统访问 -->
+    <key>platform-application</key>
+    <true/>
+
+    <!-- 允许绕过沙盒 -->
+    <key>com.apple.private.security.no-sandbox</key>
+    <true/>
+
+    <!-- 允许访问任意文件路径 -->
+    <key>com.apple.private.security.storage.AppDataContainers</key>
+    <true/>
+
+    <!-- 允许网络通信（后台保持连接） -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- 允许后台运行 -->
+    <key>com.apple.springboard.auto-launch</key>
+    <true/>
+
+    <!-- 允许写入 /Library/LaunchDaemons -->
+    <key>com.apple.private.system-shell</key>
+    <true/>
+</dict>
+</plist>
