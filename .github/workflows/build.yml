@@ -39,7 +39,7 @@ jobs:
           ldid -Sentitlements.plist AutoGoDaemon
           echo "Signed OK"
 
-       - name: Package IPA
+      - name: Package IPA
         run: |
           APP="Payload/AutoGoDaemon.app"
           mkdir -p "$APP"
