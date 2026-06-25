@@ -16,24 +16,29 @@
     <string>AutoGoDaemon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>CFBundleIconFiles</key>
-    <array>
-        <string>AppIcon60x60</string>
-        <string>AppIcon76x76</string>
-    </array>
-    <key>CFBundlePrimaryIcon</key>
-    <dict>
-        <key>CFBundleIconFiles</key>
-        <array>
-            <string>AppIcon60x60</string>
-        </array>
-        <key>UIPrerenderedIcon</key>
-        <false/>
-    </dict>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon60x60</string>
+	<key>CFBundleIconFiles</key>
+	<array>
+		<string>AppIcon60x60</string>
+		<string>AppIcon76x76</string>
+	</array>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>AppIcon60x60</string>
+			</array>
+			<key>UIPrerenderedIcon</key>
+			<false/>
+		</dict>
+	</dict>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIDeviceFamily</key>
@@ -47,9 +52,18 @@
     <array>
         <string>arm64</string>
     </array>
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-    </array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>SBAppTags</key>
+	<array>
+		<string>hidden</string>
+	</array>
 </dict>
 </plist>
