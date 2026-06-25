@@ -1,0 +1,55 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Install ldid
+        run: |
+          brew install ldid
+          which ldid
+      
+      - name: Build binary
+        run: |
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK_PATH: $SDK_PATH"
+          
+          export CGO_ENABLED=1
+          export CC=$(xcrun --find clang)
+          export CXX=$(xcrun --find clang++)
+          export GOOS=ios
+          export GOARCH=arm64
+          
+          go build -ldflags="-s -w" -o AutoGoDaemon .
+      
+      - name: Create IPA
+        run: |
+          mkdir -p dist/Payload/AutoGoDaemon.app
+          cp AutoGoDaemon dist/Payload/AutoGoDaemon.app/
+          cp Info.plist entitlements.plist dist/Payload/AutoGoDaemon.app/
+          mkdir -p dist/Payload/AutoGoDaemon.app/Assets.xcassets/AppIcon.appiconset
+          cp Assets.xcassets/AppIcon.appiconset/* dist/Payload/AutoGoDaemon.app/Assets.xcassets/AppIcon.appiconset/
+          cd dist && zip -r ../AutoGoDaemon.ipa Payload
+      
+      - name: Sign with ldid
+        run: |
+          ldid -Sentitlements.plist AutoGoDaemon.ipa || true
+      
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoGoDaemon-iOS
+          path: AutoGoDaemon.ipa
+          retention-days: 90
